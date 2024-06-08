@@ -99,7 +99,7 @@ pub struct Step {
 /// An `Assertion` is part of a `Step` that provides addtional validation to ensure the correctness
 /// of the identified target element within the EPUB content. It specifies conditions that the
 /// target element must satisfy, which can include attributes, values, and other parameters.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Assertion {
     parameters: Option<Vec<(String, String)>>,
     value: Option<String>,
@@ -131,7 +131,7 @@ pub struct RedirectedPath;
 ///
 /// This enum can contain a [`CharacterOffset`], [`SpatialOffset`], or a [`TemporalOffset`]. See
 /// their respective documentation for more details.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Offset {
     /// A character, or colon (":"), offset
     Character(CharacterOffset),
@@ -139,6 +139,10 @@ pub enum Offset {
     Spatial(SpatialOffset),
     /// A temporal offset, or tilde ("~") offset
     Temporal(TemporalOffset),
+}
+
+pub trait ToOffset {
+    fn to_offset(&self) -> Offset;
 }
 
 /// Character offset specifies an offset within an element using a colon, ":".
@@ -150,7 +154,7 @@ pub enum Offset {
 /// ```plaintext
 /// offset = ( ":" , integer ) , [ "[" , assertion , "]" ] ;
 /// ```
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CharacterOffset {
     /// Number of characters from the start of the element.
     pub start_at_point: u32,
@@ -166,6 +170,12 @@ impl CharacterOffset {
     }
 }
 
+impl ToOffset for CharacterOffset {
+    fn to_offset(&self) -> Offset {
+        Offset::Character(self.clone())
+    }
+}
+
 /// Spatial offset specifies an offset using a staring point and an optional range using an
 /// at-sign, "@".  The numbers can be floating point values to provide more precision.
 ///
@@ -176,7 +186,7 @@ impl CharacterOffset {
 /// ```plaintext
 /// offset = ( "@" , number , ":" , number ) , [ "[" , assertion , "]" ] ;
 /// ```
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SpatialOffset {
     pub start_at_point: f32,
     pub end_at_point: Option<f32>,
@@ -197,6 +207,12 @@ impl SpatialOffset {
     }
 }
 
+impl ToOffset for SpatialOffset {
+    fn to_offset(&self) -> Offset {
+        Offset::Spatial(self.clone())
+    }
+}
+
 /// Temporal offset specifies a floating point offset, optionally combined with an at-sign range.
 ///
 /// ## Syntax
@@ -206,7 +222,7 @@ impl SpatialOffset {
 /// ```plaintext
 /// offset = ( "~" , number , [ "@" , number , ":" , number ] ) , [ "[" , assertion , "]" ] ;
 /// ```
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TemporalOffset {
     /// Number of characters or percentage, context-dependent.
     pub start_at: f32,
@@ -225,5 +241,11 @@ impl TemporalOffset {
             spatial_range,
             assertion,
         }
+    }
+}
+
+impl ToOffset for TemporalOffset {
+    fn to_offset(&self) -> Offset {
+        Offset::Temporal(self.clone())
     }
 }

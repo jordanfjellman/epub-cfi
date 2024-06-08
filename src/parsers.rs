@@ -9,27 +9,29 @@ use nom::{
     IResult,
 };
 
-use crate::syntax::{Assertion, CharacterOffset, SpatialOffset, TemporalOffset};
+use crate::syntax::{Assertion, CharacterOffset, Offset, SpatialOffset, TemporalOffset, ToOffset};
 
-fn offset(input: &str) -> IResult<&str, &str> {
-    todo!()
+fn offset(input: &str) -> IResult<&str, Offset> {
+    alt((character_offset, spatial_offset, temporal_offset))(input)
 }
 
-fn character_offset(input: &str) -> IResult<&str, CharacterOffset> {
+fn character_offset(input: &str) -> IResult<&str, Offset> {
     let (input, point) = preceded(tag(":"), u32)(input)?;
     let (input, assertion) = opt(assertion)(input)?;
-    // let assertion = (Option<Vec<(&str, &str)>>, Option<&str>)
-    Ok((input, CharacterOffset::new(point, assertion)))
+    Ok((input, CharacterOffset::new(point, assertion).to_offset()))
 }
 
-fn spatial_offset(input: &str) -> IResult<&str, SpatialOffset> {
+fn spatial_offset(input: &str) -> IResult<&str, Offset> {
     let (input, (start, end)) = preceded(tag("@"), separated_pair(float, tag(":"), float))(input)?;
-    Ok((input, SpatialOffset::new(start, Some(end), None)))
+    Ok((
+        input,
+        SpatialOffset::new(start, Some(end), None).to_offset(),
+    ))
 }
 
-fn temporal_offset(input: &str) -> IResult<&str, TemporalOffset> {
+fn temporal_offset(input: &str) -> IResult<&str, Offset> {
     let (input, offset) = preceded(tag("~"), float)(input)?;
-    Ok((input, TemporalOffset::new(offset, None, None)))
+    Ok((input, TemporalOffset::new(offset, None, None).to_offset()))
 }
 
 /// A `step` starts with a slash, followed by an `integer` and an optional `assertion`.
@@ -38,7 +40,6 @@ fn temporal_offset(input: &str) -> IResult<&str, TemporalOffset> {
 pub fn step(input: &str) -> IResult<&str, (&str, Option<Assertion>)> {
     let (input, step_size) = preceded(tag("/"), digit0)(input)?;
     let (input, maybe_assertion) = opt(assertion)(input)?;
-
     Ok((input, (step_size, maybe_assertion)))
 }
 
@@ -84,7 +85,7 @@ mod tests {
     fn test_parser_character_offset() {
         assert_eq!(
             character_offset(":10").unwrap(),
-            ("", CharacterOffset::new(10, None))
+            ("", CharacterOffset::new(10, None).to_offset())
         );
     }
 
@@ -92,7 +93,7 @@ mod tests {
     fn test_parser_spatial_offset() {
         assert_eq!(
             spatial_offset("@2.5:5.3").unwrap(),
-            ("", SpatialOffset::new(2.5, Some(5.3), None))
+            ("", SpatialOffset::new(2.5, Some(5.3), None).to_offset())
         )
     }
 
@@ -100,7 +101,7 @@ mod tests {
     fn test_parser_temporal_offset() {
         assert_eq!(
             temporal_offset("~3.7").unwrap(),
-            ("", TemporalOffset::new(3.7, None, None))
+            ("", TemporalOffset::new(3.7, None, None).to_offset())
         )
     }
 
