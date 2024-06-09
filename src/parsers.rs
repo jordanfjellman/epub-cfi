@@ -12,7 +12,7 @@ use nom::{
 use crate::syntax::{Assertion, CharacterOffset, Offset, SpatialOffset, TemporalOffset, ToOffset};
 
 fn offset(input: &str) -> IResult<&str, Offset> {
-    alt((character_offset, spatial_offset, temporal_offset))(input)
+    alt((temporal_offset, spatial_offset, character_offset))(input)
 }
 
 fn character_offset(input: &str) -> IResult<&str, Offset> {
@@ -22,16 +22,24 @@ fn character_offset(input: &str) -> IResult<&str, Offset> {
 }
 
 fn spatial_offset(input: &str) -> IResult<&str, Offset> {
-    let (input, (start, end)) = preceded(tag("@"), separated_pair(float, tag(":"), float))(input)?;
+    let (input, (start, end)) =
+        preceded(tag("@"), separated_pair(float, tag(":"), opt(float)))(input)?;
+    let (input, maybe_assertion) = opt(assertion)(input)?;
     Ok((
         input,
-        SpatialOffset::new(start, Some(end), None).to_offset(),
+        SpatialOffset::new(start, end, maybe_assertion).to_offset(),
     ))
 }
 
 fn temporal_offset(input: &str) -> IResult<&str, Offset> {
     let (input, offset) = preceded(tag("~"), float)(input)?;
-    Ok((input, TemporalOffset::new(offset, None, None).to_offset()))
+    let (input, maybe_spatial_range) =
+        opt(preceded(tag("@"), separated_pair(float, tag(":"), float)))(input)?;
+    let (input, maybe_assertion) = opt(assertion)(input)?;
+    Ok((
+        input,
+        TemporalOffset::new(offset, maybe_spatial_range, maybe_assertion).to_offset(),
+    ))
 }
 
 /// A `step` starts with a slash, followed by an `integer` and an optional `assertion`.
@@ -43,7 +51,6 @@ pub fn step(input: &str) -> IResult<&str, (&str, Option<Assertion>)> {
     Ok((input, (step_size, maybe_assertion)))
 }
 
-// fn assertion(input: &str) -> IResult<&str, (Option<Vec<(&str, &str)>>, Option<&str>)> {
 fn assertion(input: &str) -> IResult<&str, Assertion> {
     let (input, (params, value)) = delimited(tag("["), params_or_value, tag("]"))(input)?;
     Ok((
@@ -105,7 +112,49 @@ mod tests {
         )
     }
 
-    fn test_offset() {}
+    #[test]
+    fn test_offset() {
+        assert_eq!(
+            offset("~2@0.5:1.5[type=note;id=note1]").unwrap(),
+            (
+                "",
+                Offset::Temporal(TemporalOffset::new(
+                    2.0,
+                    Some((0.5, 1.5)),
+                    Some(Assertion::new(
+                        Some(vec!(
+                            ("type".to_string(), "note".to_string()),
+                            ("id".to_string(), "note1".to_string())
+                        )),
+                        None
+                    ))
+                ))
+            )
+        );
+        assert_eq!(
+            offset(":10[lang=en]").unwrap(),
+            (
+                "",
+                Offset::Character(CharacterOffset::new(
+                    10,
+                    Some(Assertion::new(
+                        Some(vec!(("lang".to_string(), "en".to_string()))),
+                        None
+                    ))
+                ))
+            )
+        );
+        assert_eq!(
+            offset(":1[8]").unwrap(),
+            (
+                "",
+                Offset::Character(CharacterOffset::new(
+                    1,
+                    Some(Assertion::new(None, Some("8".to_string())))
+                ))
+            )
+        );
+    }
 
     #[test]
     fn test_parser_step() {
