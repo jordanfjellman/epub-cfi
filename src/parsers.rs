@@ -1,15 +1,15 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{alphanumeric1, digit0, digit1, u32},
+    character::complete::{alphanumeric1, digit0, digit1, u32, u8},
     combinator::{map, opt},
-    multi::separated_list1,
+    multi::{many0, separated_list1},
     number::complete::float,
-    sequence::{delimited, preceded, separated_pair},
+    sequence::{delimited, preceded, separated_pair, tuple},
     IResult,
 };
 
-use crate::syntax::{Assertion, CharacterOffset, Offset, SpatialOffset, TemporalOffset, ToOffset};
+use crate::syntax::*;
 
 fn offset(input: &str) -> IResult<&str, Offset> {
     alt((temporal_offset, spatial_offset, character_offset))(input)
@@ -45,10 +45,10 @@ fn temporal_offset(input: &str) -> IResult<&str, Offset> {
 /// A `step` starts with a slash, followed by an `integer` and an optional `assertion`.
 ///
 /// See [Step] for more details.
-pub fn step(input: &str) -> IResult<&str, (&str, Option<Assertion>)> {
-    let (input, step_size) = preceded(tag("/"), digit0)(input)?;
+pub fn step(input: &str) -> IResult<&str, Step> {
+    let (input, step_size) = preceded(tag("/"), u8)(input)?;
     let (input, maybe_assertion) = opt(assertion)(input)?;
-    Ok((input, (step_size, maybe_assertion)))
+    Ok((input, Step::new(step_size, maybe_assertion)))
 }
 
 fn assertion(input: &str) -> IResult<&str, Assertion> {
@@ -84,8 +84,33 @@ fn params_or_value(input: &str) -> IResult<&str, (Option<Vec<(&str, &str)>>, Opt
     ))(input)
 }
 
+fn local_path(input: &str) -> IResult<&str, LocalPath> {
+    let (input, local_path) = many0(step)(input)?;
+    Ok((input, LocalPath::new(local_path, RedirectedPath)))
+}
+
+fn path(input: &str) -> IResult<&str, Path> {
+    let (input, (step, local_path)) = tuple((step, local_path))(input)?;
+    Ok((input, Path::new(step, local_path)))
+}
+
+fn fragment(input: &str) -> IResult<&str, Fragment> {
+    let (input, path) = preceded(
+        tag("epubcfi"),
+        delimited(
+            tag("("),
+            // tuple(Path::from_str, opt(Range::from_str)),
+            path,
+            tag(")"),
+        ),
+    )(input)?;
+    Ok((input, Fragment::new(path)))
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::syntax::Path;
+
     use super::*;
 
     #[test]
@@ -158,17 +183,13 @@ mod tests {
 
     #[test]
     fn test_parser_step() {
-        let (input, (step_size, maybe_assertion)) = step("/6").unwrap();
-        assert_eq!("", input);
-        assert_eq!("6", step_size);
-        assert_eq!(None, maybe_assertion);
-
-        let (input, (step_size, maybe_assertion)) = step("/28[2]").unwrap();
-        assert_eq!("", input);
-        assert_eq!("28", step_size);
+        assert_eq!(step("/6").unwrap(), ("", Step::new(6, None)));
         assert_eq!(
-            Some(Assertion::new(None, Some(String::from("2")))),
-            maybe_assertion
+            step("/28[2]").unwrap(),
+            (
+                "",
+                Step::new(28, Some(Assertion::new(None, Some("2".to_string()))))
+            )
         );
     }
 
@@ -215,5 +236,53 @@ mod tests {
         assert_eq!("", input);
         assert_eq!(None, maybe_params);
         assert_eq!(Some("8"), maybe_value);
+    }
+
+    #[test]
+    fn test_parser_local_path() {
+        assert_eq!(
+            local_path("/2").unwrap(),
+            ("", LocalPath::new(vec![Step::new(2, None)], RedirectedPath))
+        );
+        assert_eq!(
+            local_path("/6/4/2").unwrap(),
+            (
+                "",
+                LocalPath::new(
+                    vec![Step::new(6, None), Step::new(4, None), Step::new(2, None)],
+                    RedirectedPath
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_parser_fragment_simple() {
+        assert_eq!(
+            fragment("epubcfi(/6/2)").unwrap(),
+            (
+                "",
+                Fragment::new(Path::new(
+                    Step::new(6, None),
+                    LocalPath::new(vec![Step::new(2, None)], RedirectedPath)
+                ))
+            )
+        );
+        assert_eq!(
+            fragment("epubcfi(/6/2[2])").unwrap(),
+            (
+                "",
+                Fragment::new(Path::new(
+                    Step::new(6, None),
+                    LocalPath::new(
+                        vec![Step::new(
+                            2,
+                            Some(Assertion::new(None, Some("2".to_string())))
+                        )],
+                        RedirectedPath
+                    )
+                ))
+            )
+        );
     }
 }

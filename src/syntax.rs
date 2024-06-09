@@ -17,7 +17,16 @@
 /// - **range**: An optional component specifying a start and end path to define a `Range` within the
 ///   document.
 /// - **")"**: This character marks the end of the CFI fragment.
-pub struct Fragment;
+#[derive(Debug, PartialEq)]
+pub struct Fragment {
+    path: Path,
+}
+
+impl Fragment {
+    pub fn new(path: Path) -> Self {
+        Self { path }
+    }
+}
 
 /// A `Path` in a CFI is a sequence of `Step`s that navigates through the hierarchical structure of
 /// an EPUB document to precisely identify a specific element or location. The path allows
@@ -47,11 +56,17 @@ pub struct Fragment;
 /// - **`/4/2!/6/3:5`**: This path starts at the fourth child element, moves to its second child,
 ///   and then redirects to another path starting from its sixth child, finally moving to the third
 ///   child with an offset of 5.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Path {
     /// The intial step in the path, indicating the starting point.
     pub step: Step,
     pub local_path: LocalPath,
+}
+
+impl Path {
+    pub fn new(step: Step, local_path: LocalPath) -> Self {
+        Self { step, local_path }
+    }
 }
 
 /// A `Step` is a fundamental part of the `Path` in a CFI, which navigates through the
@@ -90,10 +105,16 @@ pub struct Path {
 /// - **`/2[lang=en]`**: Selects the second child element and ensures it has a `lang` attribute
 ///   with a value of "en".
 ///
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Step {
     pub size: u8,
     pub assertion: Option<Assertion>,
+}
+
+impl Step {
+    pub fn new(size: u8, assertion: Option<Assertion>) -> Self {
+        Self { size, assertion }
+    }
 }
 
 /// An `Assertion` is part of a `Step` that provides addtional validation to ensure the correctness
@@ -115,13 +136,22 @@ impl Assertion {
 /// structure after the initial step. It consists of a series of `Step`s and may include an
 /// `Offset` or a `RedirectedPath`. The `LocalPath` is essential for specifying a precise location
 /// within an EPUB document.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct LocalPath {
     pub steps: Vec<Step>,
     pub redirected_path: RedirectedPath,
 }
 
-#[derive(Debug)]
+impl LocalPath {
+    pub fn new(steps: Vec<Step>, redirected_path: RedirectedPath) -> Self {
+        Self {
+            steps,
+            redirected_path,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct RedirectedPath;
 
 /// An `Offset` in a CFI specifies a precise position within a specific element. This allows for
