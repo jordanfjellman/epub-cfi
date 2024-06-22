@@ -69,6 +69,24 @@ impl Path {
     }
 }
 
+/// A `Range` in an CFI specifies a span of content within a document, defining a start and end
+/// point. This is useful for highlighting or selecting a portion of the text or content. Each end
+/// of the range is represented by a [LocalPath], and the two paths are separated by commas.
+#[derive(Debug, PartialEq)]
+pub struct Range {
+    start_point: LocalPath,
+    end_point: LocalPath,
+}
+
+impl Range {
+    pub fn new(start_point: LocalPath, end_point: LocalPath) -> Self {
+        Self {
+            start_point,
+            end_point,
+        }
+    }
+}
+
 /// A `Step` is a fundamental part of the `Path` in a CFI, which navigates through the
 /// structural elements of an EPUB document. It represents a move from one structural element
 /// to another, such as from one HTML element to another in an EPUB document.
@@ -132,27 +150,111 @@ impl Assertion {
     }
 }
 
-/// A `LocalPath` is a continuation of the CFI `Path` that navigates through the document's
-/// structure after the initial step. It consists of a series of `Step`s and may include an
-/// `Offset` or a `RedirectedPath`. The `LocalPath` is essential for specifying a precise location
-/// within an EPUB document.
+/// A local path in an EPUB Canonical Fragment Identifier (CFI) specifies a specific location
+/// within the document, allowing navigation to an element and optionally refining the position
+/// within that element using offsets or redirections. A local path can also be referred to as
+/// the "relative path".
+///
+/// - `/4/2`: Navigates to the fourth child element and then to it's second child.
+///
+/// - `/4/2:5`: Navigates to the fourth child element and then to it's second child, and specifies
+///   an offset of 5 characters within the second child.
+///
+/// - `/3/2!/5`: Navigates to the third child element, then to its second child, redirects, and
+///   moves to the fifth child element after redirection.
+///
+/// - `/4[lang=en]/2:10`: Navigates to the fourth child element, asserting it has a lang attribute
+///   equal to "en", then to its second child, and specifies an offset of 10 characters within the
+///   second child.
+///
+/// - `/6/1@3.5:7.2`: Navigates to the sixth child element, then to its first child, and specifies
+///   an offset starting at 3.5 units and ending at 7.2 units within the first child.
+///
+/// # Components
+///
+/// [EPUB Canonical Fragment Identifiers 1.1
+/// Syntax](https://idpf.org/epub/linking/cfi/epub-cfi.html#epubcfi.ebnf.local_path)
+///
+/// ```plaintext
+/// local_path = { step } , ( redirected_path | [ offset ] ) ;
+/// ```
+///
+/// - [step](Step): A navigation step within the document's hierarchy
+/// - [redirected_path](RedirectedPath): A path that includes a redirection to another location
+///   within the document.
+/// - [offset](Offset): An optional numerical value indicating a precise location within the
+///   element (e.g, character offset).
+///
+/// # Examples
+///
+/// ```rust
+/// ```
 #[derive(Debug, PartialEq)]
 pub struct LocalPath {
     pub steps: Vec<Step>,
-    pub redirected_path: RedirectedPath,
+    pub redirected_path: Option<RedirectedPath>,
+    pub offset: Option<Option<Offset>>,
 }
 
 impl LocalPath {
-    pub fn new(steps: Vec<Step>, redirected_path: RedirectedPath) -> Self {
+    pub fn new_with_redirected_path(steps: Vec<Step>, redirected_path: RedirectedPath) -> Self {
         Self {
             steps,
-            redirected_path,
+            redirected_path: Some(redirected_path),
+            offset: None,
+        }
+    }
+
+    pub fn new_with_offset(steps: Vec<Step>, offset: Option<Offset>) -> Self {
+        Self {
+            steps,
+            redirected_path: None,
+            offset: Some(offset),
         }
     }
 }
 
+/// A redirected path in an EPUB Canonical Fragment Identifier (CFI) indicates a change in the
+/// navigation context within the document. It allows redirection to another element, either
+/// specifying an exact position with an offset or providing a new path to follow after the
+/// redirection.
+///
+/// - `!/4/2`: Redirects to the fourth child element and then moves to its second child.
+///
+/// - `!/4:15`: Redirects to the fourth child element and specifies an offset of 15 characters
+///   within this element.
+///
+/// - `!/3[lang=fr]/1:10`
+///
+/// # Components
+///
+/// [EPUB Canonical Fragment Identifiers 1.1
+/// Syntax](https://idpf.org/epub/linking/cfi/epub-cfi.html#epubcfi.ebnf.redirected_path)
+///
+/// ```plaintext
+/// redirected_path = "!" , ( offset | path ) ;
+/// ```
+/// - `"!"`: Indicates the start of the redirection.
+/// - [offset](Offset): Specifies a precise position within the redirected element (e.g. character
+///   offset).
+/// - [path](Path): Specifies a new sequence of steps to navigate through the document after the
+///   redirection.
+///
+/// # Examples
+///
+/// ```rust
+/// ```
 #[derive(Debug, PartialEq)]
-pub struct RedirectedPath;
+pub struct RedirectedPath {
+    offset: Box<Option<Offset>>,
+    path: Box<Option<Path>>,
+}
+
+impl RedirectedPath {
+    pub fn new(offset: Box<Option<Offset>>, path: Box<Option<Path>>) -> Self {
+        Self { offset, path }
+    }
+}
 
 /// An `Offset` in a CFI specifies a precise position within a specific element. This allows for
 /// fine-grained navigation within the content of an EPUB document. An offset can be indicated
